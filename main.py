@@ -1,12 +1,14 @@
 import requests
 import selectorlib
 import smtplib, ssl
-import os
-
+import sqlite3
+import time
 
 URL = "http://programmer100.pythonanywhere.com/tours/"
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
+
+connection = sqlite3.connect("data.db")
 
 def scrape(url):
     """ Scrape the page soure from the url """
@@ -23,10 +25,10 @@ def send_email(message):
     host = "smtp.gmail.com"
     port = 465
 
-    username = "<SENDER email addr here>"
-    password = "<PASSWORD here>"
+    username = "<sender email here>"
+    password = "<password here>"
 
-    receiver = "<RECEIVER email addr here>"
+    receiver = "<receiver email here>"
     context = ssl.create_default_context()
 
     with smtplib.SMTP_SSL(host, port, context=context) as server:
@@ -35,21 +37,32 @@ def send_email(message):
     return print("Email was sent")
 
 def store(extracted):
-    with open("data.txt", "a") as file:
-        file.write(extracted + "\n")
+    row = extracted.split(",")
+    row = [item.strip() for item in row]
+    cursor = connection.cursor()
+    cursor.execute("INSERT INTO events VALUES(?,?,?)", row)
+    connection.commit()
 
 def read(extracted):
-    with open("data.txt", "r") as file:
-        return file.read()
+    row = extracted.split(",")
+    row = [item.strip() for item in row]
+    band, city, date = row
+    cursor = connection.cursor()
+    cursor.execute("SELECT * FROM events WHERE band=? and city=? and date=?", (band, city, date))
+    rows = cursor.fetchall()
+    print(rows)
+    return rows
 
 if __name__ == "__main__":
-    scraped = scrape(URL)
-    extracted = extract(scraped)
-    print(extracted)
+    while True:
+        scraped = scrape(URL)
+        extracted = extract(scraped)
+        print(extracted)
 
-    content = read(extracted)
-    if extracted != "No upcoming tours":
-        if extracted not in content:
-            store(extracted)
-            send_email(message="New event was detected!")
+        if extracted != "No upcoming tours":
+            row = read(extracted)
+            if not row:
+                store(extracted)
+                send_email(message="New event was detected!")
+        time.sleep(2)
 
